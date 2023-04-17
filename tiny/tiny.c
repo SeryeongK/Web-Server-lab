@@ -56,12 +56,10 @@ void doit(int fd)
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
-  printf("!!!!!!: %s\n", filename);
 
   /* Read request line and headers */
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
-  printf("????????????????????????: %s\n", filename);
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version); /* 요청 라인을 읽음 */
@@ -75,7 +73,6 @@ void doit(int fd)
   read_requesthdrs(&rio); /* 클라이언트 요청의 나머지 부분을 읽어들임 */
 
   /* Parse URI from GET request */
-  printf("여기??????? %s\n", filename);
   is_static = parse_uri(uri, filename, cgiargs); /* 요청이 정적 또는 동적 컨텐츠를 위한 것인지 나타내는 플래그 설정*/
   if (stat(filename, &sbuf) < 0)                 /* 해당 파일이 디스크 상에 있지 않으면 */
   {
@@ -155,7 +152,6 @@ void read_requesthdrs(rio_t *rp)
 int parse_uri(char *uri, char *filename, char *cgiargs)
 {
   char *ptr;
-  printf("++++++ %s\n", filename);
   if (!strstr(uri, "cgi-bin")) /* 만일 URI에 'cgi-bin' 문자열이 포함되어 있다면
                                                                 해당 요청은 동적인 콘텐츠 요청 */
   {                            /* Static content */
@@ -191,7 +187,6 @@ void serve_static(int fd, char *filename, int filesize)
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
-
   /* 파일이 존재하는지 확인 */
   if ((srcfd = open(filename, O_RDONLY, 0)) < 0)
   {
@@ -206,7 +201,6 @@ void serve_static(int fd, char *filename, int filesize)
     close(srcfd);
     return;
   }
-  printf("============\n %s, %s\n", filename, filetype);
   /* Send response headers to client */
   get_filetype(filename, filetype); /* 인자로 전달된 filename으로부터 파일 타입을 결정 */
   /* 클라이언트에 응답 줄과 응답 헤더를 생성 */
@@ -220,21 +214,28 @@ void serve_static(int fd, char *filename, int filesize)
   printf("Response headers:\n");
   printf("%s", buf);
 
-  /* Send response body to client
-  요청한 파일의 내용을 연결 식별자 fd로 복사해서 응답 본체를 보냄 */
-  srcfd = Open(filename, O_RDONLY, 0);                        /* 읽기 위해서 filename을 오픈하고 식별자를 얻어옴 */
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); /* 리눅스 mmap함수는 요청한 파일을 가상메모리 영역으로 매핑
-                                                                  mmap: 파일 srcfd의 첫 번째 filesize 바이트를
-                                                                  주소 srcp에서 시작하는 사적 읽기-허용 가상 메모리 영역으로 매핑함 */
-                                                              /* 🚨 파일을 메모리에 매핑하는 이유
-                                                                    매핑은 파일을 메모리에 올려서 해당 파일의 내용을 가상메모리 영역에서 직접 읽을 수 있도록 함
-                                                                    => 파일의 내용을 메모리에 캐싱하여 파일을 다시 읽는 데 걸리는 시간을 줄일 수 있으며
-                                                                        파일 입출력 대신 메모리 접근으로 인한 성능 향상을 가져올 수 있음 */
-  Close(srcfd);                                               /* 파일을 메모리에 매핑한 후에 더 이상 이 식별자는 필요없음 => 닫음 */
-  Rio_writen(fd, srcp, filesize);                             /* 실제로 파일을 클라이언트에게 전송
-                                                                  rio_writen: 주소 srcp에서 시작하는 filesize 바이트를
-                                                                  클라이언트의 연결 식별자로 복사함 */
-  Munmap(srcp, filesize);                                     /* 매핑된 가상메모리 주소를 반환 */
+  // /* Send response body to client
+  // 요청한 파일의 내용을 연결 식별자 fd로 복사해서 응답 본체를 보냄 */
+  // srcfd = Open(filename, O_RDONLY, 0);                        /* 읽기 위해서 filename을 오픈하고 식별자를 얻어옴 */
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); /* 리눅스 mmap함수는 요청한 파일을 가상메모리 영역으로 매핑
+  //                                                                 mmap: 파일 srcfd의 첫 번째 filesize 바이트를
+  //                                                                 주소 srcp에서 시작하는 사적 읽기-허용 가상 메모리 영역으로 매핑함 */
+  //                                                             /* 🚨 파일을 메모리에 매핑하는 이유
+  //                                                                   매핑은 파일을 메모리에 올려서 해당 파일의 내용을 가상메모리 영역에서 직접 읽을 수 있도록 함
+  //                                                                   => 파일의 내용을 메모리에 캐싱하여 파일을 다시 읽는 데 걸리는 시간을 줄일 수 있으며
+  //                                                                       파일 입출력 대신 메모리 접근으로 인한 성능 향상을 가져올 수 있음 */
+  // Close(srcfd);                                               /* 파일을 메모리에 매핑한 후에 더 이상 이 식별자는 필요없음 => 닫음 */
+  // Rio_writen(fd, srcp, filesize);                             /* 실제로 파일을 클라이언트에게 전송
+  //                                                                 rio_writen: 주소 srcp에서 시작하는 filesize 바이트를
+  //                                                                 클라이언트의 연결 식별자로 복사함 */
+  // Munmap(srcp, filesize);                                     /* 매핑된 가상메모리 주소를 반환 */
+
+   /* Send response body to client */
+  srcp = (char*)malloc(filesize); /* 파일 크기만큼 메모리 할당 */
+  Rio_readn(srcfd, srcp, filesize); /* 주어진 파일 디스크립터에서 n 바이트 만큼의 데이터를 읽어서 버퍼에 저장, 파일 디스크립터에서 읽을 수 있는 만큼의 데이터를 읽도록 보장 */
+  Close(srcfd);
+  Rio_writen(fd, srcp, filesize); /* 주어진 파일 디스크립터로부터 주어진 길이만큼의 데이터를 읽어서 버퍼에 저장, 데이터를 주어진 파일 디스크립터에 쓰도록 보장 */
+  free(srcp); // 메모리 해제
 }
 
 /* 동적 콘텐츠 처리 */
@@ -273,7 +274,7 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "image/png");
   else if (strstr(filename, ".jpg"))
     strcpy(filetype, "image/jpeg");
-  else if (strstr(filename, '.mp4'))
+  else if (strstr(filename, ".mp4")) /* C언어에서 문자열은 쌍따옴표로 둘러싸여짐. 작은따옴표는 문자 상수를 표현하는 데 사용됨. */
     strcpy(filetype, "video/mp4");
   else
     strcpy(filetype, "text/plain");
