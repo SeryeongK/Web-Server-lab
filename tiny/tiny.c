@@ -56,10 +56,12 @@ void doit(int fd)
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
+  printf("!!!!!!: %s\n", filename);
 
   /* Read request line and headers */
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
+  printf("????????????????????????: %s\n", filename);
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version); /* 요청 라인을 읽음 */
@@ -73,6 +75,7 @@ void doit(int fd)
   read_requesthdrs(&rio); /* 클라이언트 요청의 나머지 부분을 읽어들임 */
 
   /* Parse URI from GET request */
+  printf("여기??????? %s\n", filename);
   is_static = parse_uri(uri, filename, cgiargs); /* 요청이 정적 또는 동적 컨텐츠를 위한 것인지 나타내는 플래그 설정*/
   if (stat(filename, &sbuf) < 0)                 /* 해당 파일이 디스크 상에 있지 않으면 */
   {
@@ -152,9 +155,9 @@ void read_requesthdrs(rio_t *rp)
 int parse_uri(char *uri, char *filename, char *cgiargs)
 {
   char *ptr;
-
+  printf("++++++ %s\n", filename);
   if (!strstr(uri, "cgi-bin")) /* 만일 URI에 'cgi-bin' 문자열이 포함되어 있다면
-                                  해당 요청은 동적인 콘텐츠 요청 */
+                                                                해당 요청은 동적인 콘텐츠 요청 */
   {                            /* Static content */
     strcpy(cgiargs, "");       /* CGI 인자 스트링을 지움 */
     /* URI를 상대 리눅스 경로 이름으로 변환 */
@@ -189,9 +192,25 @@ void serve_static(int fd, char *filename, int filesize)
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
+  /* 파일이 존재하는지 확인 */
+  if ((srcfd = open(filename, O_RDONLY, 0)) < 0)
+  {
+    printf("serve_static error: cannot open file %s\n", filename);
+    return;
+  }
+
+  /* 파일 사이즈 확인 */
+  if (filesize <= 0)
+  {
+    printf("serve_static error: invalid file size %d\n", filesize);
+    close(srcfd);
+    return;
+  }
+  printf("============\n %s, %s\n", filename, filetype);
   /* Send response headers to client */
   get_filetype(filename, filetype); /* 인자로 전달된 filename으로부터 파일 타입을 결정 */
   /* 클라이언트에 응답 줄과 응답 헤더를 생성 */
+  printf("여기\n");
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
@@ -254,6 +273,8 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "image/png");
   else if (strstr(filename, ".jpg"))
     strcpy(filetype, "image/jpeg");
+  else if (strstr(filename, '.mp4'))
+    strcpy(filetype, "video/mp4");
   else
     strcpy(filetype, "text/plain");
 }
