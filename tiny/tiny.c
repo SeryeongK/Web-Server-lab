@@ -13,9 +13,9 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, char *method);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
 
@@ -62,8 +62,8 @@ void doit(int fd)
   Rio_readlineb(&rio, buf, MAXLINE);
   printf("Request headers:\n");
   printf("%s", buf);
-  sscanf(buf, "%s %s %s", method, uri, version); /* 요청 라인을 읽음 */
-  if (strcasecmp(method, "GET"))                 /* GET 메소드일 경우, 에러 */
+  sscanf(buf, "%s %s %s", method, uri, version);               /* 요청 라인을 읽음 */
+  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) /* GET과 HEAD 메소드가 아닐 경우, 에러 */
   {
     /* 501 에러 반환 */
     clienterror(fd, method, "501", "Not implemented",
@@ -90,7 +90,7 @@ void doit(int fd)
                   "Tiny couldn't read the file");
       return;
     }
-    serve_static(fd, filename, sbuf.st_size); /* 만일 그렇다면 정적 컨텐츠를 클라이언트에게 제공 */
+    serve_static(fd, filename, sbuf.st_size, method); /* 만일 그렇다면 정적 컨텐츠를 클라이언트에게 제공 */
   }
   else
   {                                                            /* Serve dynamic content */
@@ -101,7 +101,7 @@ void doit(int fd)
                   "Tiny couldn't run the CGI program");
       return;
     }
-    serve_dynamic(fd, filename, cgiargs); /* 만일 그렇다면 해당 프로그램을 실행 -> 결과를 클라이언트에게 반환 */
+    serve_dynamic(fd, filename, cgiargs, method); /* 만일 그렇다면 해당 프로그램을 실행 -> 결과를 클라이언트에게 반환 */
   }
 }
 
@@ -183,7 +183,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 
 /* 정적 콘텐츠 처리
    지역 파일의 내용을 포함하고 있는 본체를 갖는 HTTP 응답을 보냄 */
-void serve_static(int fd, char *filename, int filesize)
+void serve_static(int fd, char *filename, int filesize, char *method)
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -210,6 +210,10 @@ void serve_static(int fd, char *filename, int filesize)
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf)); /* Rio_writen: 주어진 연결 식별자(fd)에 대해 주어진 버퍼(buf)에 있는 데이터를 전송 */
+  if (!strcasecmp(method, "HEAD"))
+  {
+    return;
+  }
   printf("Response headers:\n");
   printf("%s", buf);
 
@@ -238,7 +242,7 @@ void serve_static(int fd, char *filename, int filesize)
 }
 
 /* 동적 콘텐츠 처리 */
-void serve_dynamic(int fd, char *filename, char *cgiargs)
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method)
 {
   char buf[MAXLINE], *emptylist[] = {NULL};
 
@@ -247,7 +251,10 @@ void serve_dynamic(int fd, char *filename, char *cgiargs)
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
-
+  if (!strcasecmp(method, "HEAD"))
+  {
+    return;
+  }
   if (Fork() == 0) /* 새로운 자식 프로세스 fork. 부모 프로세스에서는 자식 프로세스 ID를 반환, 자식 프로세스에서는 0을 반환 */
   {                /* Child */
     /* Real server would set all CGI vars here */
