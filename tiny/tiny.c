@@ -204,7 +204,6 @@ void serve_static(int fd, char *filename, int filesize)
   /* Send response headers to client */
   get_filetype(filename, filetype); /* 인자로 전달된 filename으로부터 파일 타입을 결정 */
   /* 클라이언트에 응답 줄과 응답 헤더를 생성 */
-  printf("여기\n");
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
@@ -230,12 +229,12 @@ void serve_static(int fd, char *filename, int filesize)
   //                                                                 클라이언트의 연결 식별자로 복사함 */
   // Munmap(srcp, filesize);                                     /* 매핑된 가상메모리 주소를 반환 */
 
-   /* Send response body to client */
-  srcp = (char*)malloc(filesize); /* 파일 크기만큼 메모리 할당 */
+  /* Send response body to client */
+  srcp = (char *)malloc(filesize);  /* 파일 크기만큼 메모리 할당 */
   Rio_readn(srcfd, srcp, filesize); /* 주어진 파일 디스크립터에서 n 바이트 만큼의 데이터를 읽어서 버퍼에 저장, 파일 디스크립터에서 읽을 수 있는 만큼의 데이터를 읽도록 보장 */
   Close(srcfd);
   Rio_writen(fd, srcp, filesize); /* 주어진 파일 디스크립터로부터 주어진 길이만큼의 데이터를 읽어서 버퍼에 저장, 데이터를 주어진 파일 디스크립터에 쓰도록 보장 */
-  free(srcp); // 메모리 해제
+  free(srcp);                     // 메모리 해제
 }
 
 /* 동적 콘텐츠 처리 */

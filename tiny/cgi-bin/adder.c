@@ -14,12 +14,16 @@ int main(void)
   /* Extract the two arguments */
   if ((buf = getenv("QUERY_STRING")) != NULL)
   {
+    /*
     p = strchr(buf, '&');
     *p = '\0';
     strcpy(arg1, buf);
     strcpy(arg2, p + 1);
     n1 = atoi(arg1);
     n2 = atoi(arg2);
+    */
+
+    sscanf(buf, "num1=%d&num2=%d", &n1, &n2); /* buf 문자열에서 정수형 인자를 추출 */
   }
 
   /* Make the response body */
