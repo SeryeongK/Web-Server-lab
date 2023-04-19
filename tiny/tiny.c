@@ -16,17 +16,18 @@ int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize, char *method);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
-                 char *longmsg);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+void *thread(void *vargp);
 
 /* 단일 스레드로 동작
 여러 클라이언트들이 동시에 연결 요청을 보내면 각각의 연결 요청이 순차적으로 처리됨 */
 int main(int argc, char **argv) /* 인자의 개수 / 인자의 내용을 담고 있는 배열 */
 {
-  int listenfd, connfd;
+  int listenfd, *connfdp;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
+  pthread_t tid;
 
   /* Check command line args */
   if (argc != 2) /* 포트 번호가 전달되지 않으면. 원래는 프로그램 이름(argv[0])과 포트 번호(argv[1]) 두 개의 인자가 전달되어야 함 */
@@ -39,12 +40,13 @@ int main(int argc, char **argv) /* 인자의 개수 / 인자의 내용을 담고
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);                       /* line:netp:tiny:accept 반복적으로 연결 요청 접수. 클라이언트의 연결 요청 수락
-                                                                                        => 새로운 소켓 디스크립터(connfd, 서버와 클라이언트 간의 통신에 사용. 연결 식별자) 반환 */
+    connfdp = Malloc(sizeof(int));
+    *connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen); /* line:netp:tiny:accept 반복적으로 연결 요청 접수. 클라이언트의 연결 요청 수락
+                                                                  => 새로운 소켓 디스크립터(connfd, 서버와 클라이언트 간의 통신에 사용. 연결 식별자) 반환 */
+
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0); /* 클라이언트의 IP 주소와 포트 번호를 가져와서 호스트 이름 hostname과 포트 번호 port로 변환 */
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    doit(connfd);  // line:netp:tiny:doit 클라이언트와의 트랜잭션 수행. 서버에서는 클라이언트의 요청을 수신하고, 요청에 대한 응답을 보내는 작업 수행
-    Close(connfd); // line:netp:tiny:close 자신 쪽의 연결 끝을 닫음
+    Pthread_create(&tid, NULL, thread, connfdp);
   }
 }
 
@@ -284,4 +286,15 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "video/mp4");
   else
     strcpy(filetype, "text/plain");
+}
+
+/* Thread routine */
+void *thread(void *vargp)
+{
+  int connfd = *((int *)vargp);
+  Pthread_detach(pthread_self());
+  Free(vargp);
+  doit(connfd);  // line:netp:tiny:doit 클라이언트와의 트랜잭션 수행. 서버에서는 클라이언트의 요청을 수신하고, 요청에 대한 응답을 보내는 작업 수행
+  Close(connfd); // line:netp:tiny:close 자신 쪽의 연결 끝을 닫음
+  return NULL;
 }

@@ -16,6 +16,7 @@ void do_request(int p_clientfd, char *method, char *uri_ptos, char *host);
 void do_response(int p_connfd, int p_clientfd);
 int parse_uri(char *uri, char *uri_ptos, char *host, char *port);
 int parse_responsehdrs(rio_t *rp, int length);
+void *thread(int vargp);
 
 /*
 파일 디스크립터: 컴퓨터 프로그램이 파일 또는 기타 입/출력 리소스를 참조하는 방법
@@ -33,10 +34,11 @@ typedef struct {
 
 int main(int argc, char **argv)
 {
-  int listenfd, p_connfd;
+  int listenfd, *p_connfdp;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
+  pthread_t tid;
 
   if (argc != 2)
   {
@@ -45,16 +47,32 @@ int main(int argc, char **argv)
   }
   listenfd = Open_listenfd(argv[1]);
 
+  /*
+  다른 방법 - 만약에 p_connfdp가 큰 메모리 공간을 가지는 변수라면 비효율적일 수 있음
+  🤔 malloc을 사용하지 않고 포인터로 바로 넘겨줄 경우는?
+  p_connfdp를 여러 개의 쓰레드가 참조할 경우 이전 쓰레드의 동작이 끝나기 전에
+  p_connfdp가 변경될 수 있음 => 값이 변경되어 문제가 생김
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    p_connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
-
+    p_connfdp = Malloc(sizeof(int));
+    *p_connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen);
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    do_it(p_connfd);
-    Close(p_connfd); /* 클라이언트와의 연결 종료 */
+    Pthread_create(&tid, NULL, thread, p_connfdp);
   }
+  */
+
+  while (1)
+  {
+    clientlen = sizeof(clientaddr);
+    p_connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+
+    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accepted connection from (%s %s).\n", hostname, port);
+    Pthread_create(&tid, NULL, thread, p_connfdp); /* 굳이 포인터로 넘겨줄 필요가 없음 */
+  }
+
   return 0;
 }
 
@@ -164,4 +182,23 @@ int parse_uri(char *uri, char *uri_ptos, char *host, char *port)
     strcpy(uri_ptos, "/");
 
   return 0;
+}
+
+/* Thread routine */
+/* 다른 방법
+void *thread(void *vargp)
+{
+  int connfd = *((int *)vargp);
+  Pthread_detach(pthread_self());
+  Free(vargp);
+  do_it(connfd);
+  Close(connfd);
+}
+*/
+
+void *thread(int connfd)
+{
+  Pthread_detach(pthread_self());
+  do_it(connfd);
+  Close(connfd); /* 클라이언트와의 연결 종료 */
 }
