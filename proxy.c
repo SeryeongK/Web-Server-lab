@@ -14,7 +14,7 @@ static const char *user_agent_hdr =
 static const char *new_version = "HTTP/1.0";
 
 void do_it(int fd);
-void do_request(int p_clientfd, char *method, char *uri_ptos, char *host);
+void do_request(int serverfd, char *method, char *uri_ptos, char *host);
 int parse_uri(char *uri, char *uri_ptos, char *host, char *port);
 int parse_responsehdrs(rio_t *rp, int length);
 void *thread(int vargp);
@@ -64,7 +64,7 @@ Cache cache;
 
 int main(int argc, char **argv)
 {
-  int listenfd, *p_connfdp;
+  int listenfd, *connfd;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
@@ -82,30 +82,32 @@ int main(int argc, char **argv)
 
   listenfd = Open_listenfd(argv[1]);
 
+  /* 🧠 개선점 => 쓰레드 풀(워커 쓰레드)을 미리 만들어서 client가 들어오면 작업 할당(큐) */
+
   /*
-  다른 방법 - 만약에 p_connfdp가 큰 메모리 공간을 가지는 변수라면 비효율적일 수 있음
+  다른 방법 - 만약에 connfd가 큰 메모리 공간을 가지는 변수라면 비효율적일 수 있음
   🤔 malloc을 사용하지 않고 포인터로 바로 넘겨줄 경우는?
-  p_connfdp를 여러 개의 쓰레드가 참조할 경우 이전 쓰레드의 동작이 끝나기 전에
-  p_connfdp가 변경될 수 있음 => 값이 변경되어 문제가 생김
+  connfd를 여러 개의 쓰레드가 참조할 경우 이전 쓰레드의 동작이 끝나기 전에
+  connfd가 변경될 수 있음 => 값이 변경되어 문제가 생김
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    p_connfdp = Malloc(sizeof(int));
-    *p_connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+    connfd = Malloc(sizeof(int));
+    *connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    Pthread_create(&tid, NULL, thread, p_connfdp);
+    Pthread_create(&tid, NULL, thread, connfd);
   }
   */
 
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    p_connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
 
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s %s).\n", hostname, port);
-    Pthread_create(&tid, NULL, thread, p_connfdp); /* 굳이 포인터로 넘겨줄 필요가 없음 */
+    Pthread_create(&tid, NULL, thread, connfd); /* 굳이 포인터로 넘겨줄 필요가 없음 */
   }
 
   return 0;
@@ -113,7 +115,7 @@ int main(int argc, char **argv)
 
 void do_it(int p_connfd)
 {
-  int p_clientfd;
+  int serverfd;
   char buf[MAXLINE], host[MAXLINE], port[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE]; /* 프록시가 요청을 보낼 서버의 IP, port */
   char uri_ptos[MAXLINE];
   rio_t rio, server_rio;
@@ -165,14 +167,14 @@ void do_it(int p_connfd)
   /* ====== end server에 요청 보낼 준비 완료! ====== */
 
   /* hostname, port 서버에 대한 connection 열기 => 서버와의 소켓 디스크립터 생성 */
-  p_clientfd = Open_clientfd(host, port);
-  do_request(p_clientfd, method, uri_ptos, host);
+  serverfd = Open_clientfd(host, port);
+  do_request(serverfd, method, uri_ptos, host);
   /* ====== end server에 요청 완료! ====== */
   /* 기존의 do_response */
   char cachebuf[MAX_OBJECT_SIZE];
   int sizebuf = 0;
   size_t n;
-  Rio_readinitb(&rio, p_clientfd); /* 서버 소켓과 연결 */
+  Rio_readinitb(&rio, serverfd); /* 서버 소켓과 연결 */
 
   while ((n = Rio_readlineb(&rio, buf, MAXLINE)) != 0) /* 읽을 데이터가 없을 때까지 반복, rio에서 한 줄씩 읽고 buf에 저장 */
   {
@@ -182,7 +184,7 @@ void do_it(int p_connfd)
     Rio_writen(p_connfd, buf, n);  /* 클라이언트에 buf를 보냄 */
   }
   /* ===== end server에서 받은 응답 => 클라이언트에게 전송 완료! =====*/
-  Close(p_clientfd); /* 서버와의 연결 종료 */
+  Close(serverfd); /* 서버와의 연결 종료 */
 
   /*store it*/
   if (sizebuf < MAX_OBJECT_SIZE)
@@ -191,7 +193,7 @@ void do_it(int p_connfd)
   }
 }
 
-void do_request(int p_clientfd, char *method, char *uri_ptos, char *host)
+void do_request(int serverfd, char *method, char *uri_ptos, char *host)
 {
   char buf[MAXLINE];
   printf("Request headers to server: \n");
@@ -203,7 +205,7 @@ void do_request(int p_clientfd, char *method, char *uri_ptos, char *host)
   sprintf(buf, "%sConnections: close\r\n", buf);
   sprintf(buf, "%sProxy-Connection: close\r\n\r\n", buf);
 
-  Rio_writen(p_clientfd, buf, (size_t)strlen(buf)); /* 서버에 HTTP request 메시지를 보냄 */
+  Rio_writen(serverfd, buf, (size_t)strlen(buf)); /* 서버에 HTTP request 메시지를 보냄 */
 }
 
 int parse_uri(char *uri, char *uri_ptos, char *host, char *port)
