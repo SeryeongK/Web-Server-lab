@@ -118,11 +118,11 @@ void do_it(int p_connfd)
   int serverfd;
   char buf[MAXLINE], host[MAXLINE], port[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE]; /* 프록시가 요청을 보낼 서버의 IP, port */
   char uri_ptos[MAXLINE];
-  rio_t rio, server_rio;
+  rio_t rio;
 
   /*
   Rio_readinitb: rio_t 구조체를 초기화하는 함수
-  serve_fd라는 파일 디스크립터를 사용하여 rio_t 구조체인 server_rio 초기화
+  serve_fd라는 파일 디스크립터를 사용하여 rio_t 구조체인 rio 초기화
   */
   Rio_readinitb(&rio, p_connfd); /* 클라이언트와의 connectoin */
   /*
